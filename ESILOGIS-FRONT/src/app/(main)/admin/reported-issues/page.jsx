@@ -7,7 +7,7 @@ import Nav from '@/app/components/NavBar/Nav';
 import Reportedissuestable from "@/app/components/reported-issues-table/reported-issues-table";
 import arrows from '../../../../../public/Images/arrows.svg';
 import Image from 'next/image';
-import { Loader, AlertCircle, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Loader, AlertCircle, AlertTriangle, CheckCircle,FileDown } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -160,7 +160,105 @@ export default function InterventionsPage() {
     
     showToast(`${actionName} failed: ${error.message}`, 'error');
   }, [router, showToast]);
+ 
 
+  // Add this function near your other utility functions at the top
+  // This function converts data to CSV format
+  const convertToCSV = (objArray) => {
+    const array = typeof objArray !== 'object' ? JSON.parse(objArray) : objArray;
+    let str = '';
+  
+    // Add header row
+    const headers = [
+      'ID', 'Date', 'Description', 'Status', 'Priority', 
+      'Location', 'Equipment Code', 'Equipment Type', 'Reporter', 'Assignees'
+    ];
+    str += headers.join(',') + '\r\n';
+  
+    // Add data rows
+    for (let i = 0; i < array.length; i++) {
+      let line = '';
+      
+      // ID
+      line += `"${array[i].id}",`;
+      
+      // Date
+      line += `"${array[i].date}",`;
+      
+      // Description - escape quotes and newlines for CSV
+      const safeDescription = array[i].description?.replace(/"/g, '""') || '';
+      line += `"${safeDescription}",`;
+      
+      // Status
+      line += `"${array[i].status}",`;
+      
+      // Priority
+      line += `"${array[i].priority}",`;
+      
+      // Location
+      line += `"${array[i].location}",`;
+      
+      // Equipment Code
+      line += `"${array[i].equipmentCode}",`;
+      
+      // Equipment Type
+      line += `"${array[i].equipmentType}",`;
+      
+      // Reporter (name only)
+      const reporterName = array[i].reporter?.name || 'N/A';
+      line += `"${reporterName}",`;
+      
+      // Assignees (names joined with semicolons)
+      const assignees = array[i].assignees.map(a => a.name).join('; ');
+      line += `"${assignees}"`;
+      
+      str += line + '\r\n';
+    }
+    
+    return str;
+  };
+  
+  // Add this function to your component
+  const handleExportCSV = useCallback(() => {
+    if (uiState.isSubmitting) return;
+    
+    try {
+      setUiState(prev => ({ ...prev, isSubmitting: true }));
+      showToast('Generating CSV file...', 'info');
+      
+      // Convert reports data to CSV
+      const csv = convertToCSV(data.reports);
+      
+      // Create a Blob with the CSV data
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      
+      // Create a download link and trigger the download
+      const link = document.createElement('a');
+      
+      // Handle browser differences
+      if (navigator.msSaveBlob) { // For IE and Edge
+        navigator.msSaveBlob(blob, 'interventions-report.csv');
+      } else {
+        // For other browsers
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.style.display = 'none';
+        link.setAttribute('download', `interventions-report-${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+      
+      showToast('CSV file generated successfully', 'success');
+    } catch (error) {
+      console.error("Error generating CSV:", error);
+      showToast(`CSV generation failed: ${error.message}`, 'error');
+    } finally {
+      setUiState(prev => ({ ...prev, isSubmitting: false }));
+    }
+  }, [data.reports, showToast, uiState.isSubmitting]);
+  
   // -------------- RESPONSIVE DESIGN --------------
   // Check for mobile view
   useEffect(() => {
@@ -656,19 +754,33 @@ export default function InterventionsPage() {
       </div>
       
       {/* PDF Export Button - Fixed position that adapts to viewport */}
-      <div className="fixed bottom-5 right-5 z-40"> 
-        <button 
-          className={`bg-[#474747] px-6 py-2 rounded-xl hover:bg-[#333333] transition-colors text-white flex items-center ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
-          onClick={handleExportPDF}
-          disabled={isSubmitting || loading || !!error || reports.length === 0}
-        >
-          {isSubmitting ? (
-            <><Loader className="h-4 w-4 mr-2 animate-spin" /> Generating PDF...</>
-          ) : (
-            'Download as PDF'
-          )}
-        </button>
-      </div>
+      <div className="fixed bottom-5 right-5 z-40 flex gap-2"> 
+      {/* CSV Export Button */}
+      <button 
+        className={`bg-[#49733e] px-6 py-2 rounded-xl hover:bg-[#3a5d30] transition-colors text-white flex items-center ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
+        onClick={handleExportCSV}
+        disabled={isSubmitting || loading || !!error || reports.length === 0}
+      >
+        {isSubmitting ? (
+          <><Loader className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
+        ) : (
+          <><FileDown className="h-4 w-4 mr-2" /> Export CSV</>
+        )}
+      </button>
+      
+      {/* PDF Export Button */}
+      <button 
+        className={`bg-[#474747] px-6 py-2 rounded-xl hover:bg-[#333333] transition-colors text-white flex items-center ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
+        onClick={handleExportPDF}
+        disabled={isSubmitting || loading || !!error || reports.length === 0}
+      >
+        {isSubmitting ? (
+          <><Loader className="h-4 w-4 mr-2 animate-spin" /> Generating PDF...</>
+        ) : (
+          'Download as PDF'
+        )}
+      </button>
+    </div>
     </section>
   );
 }
