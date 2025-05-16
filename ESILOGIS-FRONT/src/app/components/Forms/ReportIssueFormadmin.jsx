@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Search, X, Camera, RefreshCw, AlertTriangle, Loader, AlertCircle, CheckCircle, ChevronDown, Info } from "lucide-react";
 import ConfirmReportPopup from "../popups/ConfirmReportPopup";
+import { useRouter } from "next/navigation";
 
 export default function ReportIssueFormTechnician({ 
   onScanClick, 
@@ -13,6 +14,7 @@ export default function ReportIssueFormTechnician({
   attachedFiles = [],
   onResetBarcode
 }) {
+  const router = useRouter();
   const [locationId, setLocationId] = useState("");
   const [description, setDescription] = useState("");
   const [equipment, setEquipment] = useState("");
@@ -224,7 +226,7 @@ export default function ReportIssueFormTechnician({
     fetchLocations();
   }, []); // No dependencies needed here
 
-  // Fetch equipment by location - FIXED
+  // Fetch equipment by location - CORRECTED ENDPOINT
   useEffect(() => {
     // Skip if we don't have a location ID
     if (!locationId) {
@@ -252,41 +254,91 @@ export default function ReportIssueFormTechnician({
         // Cache previous barcode so we can check it after fetching
         const prevBarcode = scannedBarcode;
         
-        const response = await fetch(
-          `http://localhost:3001/api/equipment/location/${locationId}`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${sessionStorage.getItem("token")}`,
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const result = await response.json();
+        // Try different endpoint patterns - first one with query parameter
+        console.log(`Fetching equipment for location ID: ${locationId}`);
         
-        // Ensure we handle the API response structure correctly
-        let equipmentArray;
-        if (Array.isArray(result)) {
-          equipmentArray = result;
-        } else if (result && typeof result === 'object') {
-          if (Array.isArray(result.data)) {
-            equipmentArray = result.data;
-          } else if (result.equipments && Array.isArray(result.equipments)) {
-            equipmentArray = result.equipments;
+        try {
+          // First attempt - using query parameter
+          const response = await fetch(
+            `http://localhost:3001/api/equipment?locationId=${locationId}`,
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${sessionStorage.getItem("token")}`,
+              },
+            }
+          );
+          
+          if (!response.ok) {
+            console.log(`First endpoint attempt failed: ${response.status}, trying alternative`);
+            throw new Error("Try alternative endpoint");
+          }
+          
+          const result = await response.json();
+          
+          // Ensure we handle the API response structure correctly
+          let equipmentArray;
+          if (Array.isArray(result)) {
+            equipmentArray = result;
+          } else if (result && typeof result === 'object') {
+            if (Array.isArray(result.data)) {
+              equipmentArray = result.data;
+            } else if (result.equipments && Array.isArray(result.equipments)) {
+              equipmentArray = result.equipments;
+            } else {
+              equipmentArray = [];
+            }
           } else {
             equipmentArray = [];
           }
-        } else {
-          equipmentArray = [];
+          
+          console.log("Fetched equipment:", equipmentArray);
+          setEquipmentList(equipmentArray);
+          
+        } catch (firstError) {
+          // Second attempt - using location endpoint
+          console.log("Trying alternative endpoint pattern");
+          
+          try {
+            const locationResponse = await fetch(
+              `http://localhost:3001/api/location/${locationId}`,
+              {
+                method: "GET",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${sessionStorage.getItem("token")}`,
+                },
+              }
+            );
+            
+            if (!locationResponse.ok) {
+              throw new Error(`HTTP error! status: ${locationResponse.status}`);
+            }
+            
+            const locationData = await locationResponse.json();
+            
+            // Extract equipment from location response
+            let equipmentArray = [];
+            
+            if (locationData && locationData.equipment) {
+              equipmentArray = Array.isArray(locationData.equipment) 
+                ? locationData.equipment 
+                : [];
+            } else if (locationData && locationData.data && locationData.data.equipment) {
+              equipmentArray = Array.isArray(locationData.data.equipment) 
+                ? locationData.data.equipment 
+                : [];
+            }
+            
+            console.log("Fetched equipment from location endpoint:", equipmentArray);
+            setEquipmentList(equipmentArray);
+            
+          } catch (secondError) {
+            console.error("Both equipment endpoint attempts failed:", secondError);
+            throw secondError; // Re-throw to be caught by the outer catch
+          }
         }
-        
-        console.log("Fetched equipment:", equipmentArray);
-        setEquipmentList(equipmentArray);
         
         // Reset the processedBarcode ref to allow rescanning after location change
         processedBarcodeRef.current = '';
@@ -498,25 +550,28 @@ export default function ReportIssueFormTechnician({
     setFileList(files => files.filter((_, i) => i !== index));
   };
 
-  // Clear scanned barcode to scan a new one
+  // Clear scanned barcode and force page reload
   const clearScannedBarcode = () => {
+    // Show a loading toast
+    showToast('Reloading page...', "info");
+    
     // Clear equipment selection
     setEquipment('');
     setEquipmentId('');
     setEquipmentSearch('');
     setScanDebugInfo(null);
     setBarcodeNotFound({ show: false, barcode: '', format: '' });
-    processedBarcodeRef.current = ''; // Reset processed barcode ref
+    processedBarcodeRef.current = ''; // Reset the processed barcode ref
     
     // Reset barcode in parent component
     if (onResetBarcode && typeof onResetBarcode === 'function') {
       onResetBarcode();
-    } else {
-      showToast("Could not reset barcode scanner", "error");
     }
     
-    // Show notification
-    showToast('Cleared equipment selection. You can scan a new barcode.', "info");
+    // Force a complete page reload after a short delay to allow toast to be visible
+    setTimeout(() => {
+      window.location.reload(true); // true parameter forces reload from server, not cache
+    }, 500);
   };
 
   // Handle when user wants to proceed without equipment
@@ -540,16 +595,23 @@ export default function ReportIssueFormTechnician({
     <div className="bg-white px-4 sm:px-6 md:px-8 lg:px-40 py-6 sm:py-8 md:py-10 shadow-xl rounded-lg w-full max-w-7xl mx-auto font-light font-outfit">
       {/* Toast notification */}
       {toast.show && (
-        <div className={`fixed top-4 right-4 z-50 py-2 px-4 rounded-md shadow-lg flex items-center ${
+        <div className={`fixed top-16 sm:top-4 right-4 left-4 sm:left-auto z-[9999] py-2 px-4 rounded-md shadow-lg flex items-center ${
           toast.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 
           toast.type === 'error' ? 'bg-red-50 text-red-800 border border-red-200' : 
           toast.type === 'warning' ? 'bg-yellow-50 text-yellow-800 border border-yellow-200' :
           'bg-blue-50 text-blue-800 border border-blue-200'
         }`}>
-          {toast.type === 'success' && <CheckCircle className="h-5 w-5 mr-2" />}
-          {toast.type === 'error' && <AlertCircle className="h-5 w-5 mr-2" />}
-          {toast.type === 'warning' && <AlertCircle className="h-5 w-5 mr-2" />}
-          <span>{toast.message}</span>
+          {toast.type === 'success' && <CheckCircle className="h-5 w-5 mr-2 flex-shrink-0" />}
+          {toast.type === 'error' && <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />}
+          {toast.type === 'warning' && <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />}
+          {toast.type === 'info' && <Info className="h-5 w-5 mr-2 flex-shrink-0" />}
+          <span className="text-sm">{toast.message}</span>
+          <button 
+            onClick={() => setToast({...toast, show: false})} 
+            className="ml-auto text-gray-400 hover:text-gray-600"
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
 
@@ -651,7 +713,7 @@ export default function ReportIssueFormTechnician({
                   <button
                     type="button"
                     onClick={clearScannedBarcode}
-                    title="Reset scanned barcode"
+                    title="Reset scanned barcode and refresh page"
                     className="bg-gray-200 text-gray-700 rounded-md px-3 py-2 hover:bg-gray-300"
                   >
                     <RefreshCw size={16} />
@@ -773,7 +835,7 @@ export default function ReportIssueFormTechnician({
                       onClick={clearScannedBarcode}
                       className="text-xs px-3 py-1.5 bg-white hover:bg-gray-50 text-blue-600 rounded border border-blue-200 transition-colors"
                     >
-                      Reset & Scan Again
+                      Reset & Try Again
                     </button>
                   </div>
                 </div>
@@ -790,9 +852,9 @@ export default function ReportIssueFormTechnician({
               {onResetBarcode && (
                 <button 
                   onClick={clearScannedBarcode} 
-                  className="text-blue-700 hover:text-blue-900 ml-2 font-medium"
+                  className="text-blue-700 hover:text-blue-900 ml-2 font-medium flex items-center"
                 >
-                  Reset
+                  <RefreshCw size={12} className="mr-1" /> Reset & Refresh
                 </button>
               )}
             </div>
@@ -873,9 +935,25 @@ export default function ReportIssueFormTechnician({
           )}
         </div>
 
+        {/* Debug info for development */}
+        {process.env.NODE_ENV === 'development' && scanDebugInfo && (
+          <div className="mb-4 p-2 bg-gray-50 rounded-md text-xs text-gray-600">
+            <details>
+              <summary className="cursor-pointer">Scan Debug Info</summary>
+              <pre className="mt-1 whitespace-pre-wrap">
+                Barcode: {scanDebugInfo.barcode}
+                Format: {scanDebugInfo.format}
+                Time: {scanDebugInfo.time}
+                Equipment ID: {equipmentId || 'not set'}
+                Processed Ref: {processedBarcodeRef.current}
+              </pre>
+            </details>
+          </div>
+        )}
+
         {/* Form Actions */}
         <div className="flex flex-col sm:flex-row justify-end gap-4 pt-6">
-          <Link href="../../technician/workOrders" className="w-full sm:w-auto"> 
+          <Link href="../../admin/workOrders" className="w-full sm:w-auto"> 
             <button
               type="button"
               className="w-full sm:w-auto px-10 sm:px-14 py-2.5 sm:py-1 rounded-xl border-2 border-black bg-white text-black mb-3 sm:mb-0"
