@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Search, X, Camera, RefreshCw, AlertTriangle, Loader, AlertCircle, CheckCircle, ChevronDown, Info } from "lucide-react";
 import ConfirmReportPopup from "../popups/ConfirmReportPopup";
+import { useRouter } from "next/navigation";
 
 export default function ReportIssueFormTechnician({ 
   onScanClick, 
@@ -13,6 +14,7 @@ export default function ReportIssueFormTechnician({
   attachedFiles = [],
   onResetBarcode
 }) {
+  const router = useRouter();
   const [locationId, setLocationId] = useState("");
   const [description, setDescription] = useState("");
   const [equipment, setEquipment] = useState("");
@@ -452,8 +454,6 @@ export default function ReportIssueFormTechnician({
     // Reset location last to avoid equipment fetch issues
     setLocationId("");
     setSelectedLocationName("");
-    
-    // No need for page reload - that causes more issues than it solves
   };
 
   // Handle location selection
@@ -531,27 +531,29 @@ export default function ReportIssueFormTechnician({
     setFileList(files => files.filter((_, i) => i !== index));
   };
 
-  // Clear scanned barcode to scan a new one
-  const clearScannedBarcode = () => {
-    // Clear equipment selection
-    setEquipment('');
-    setEquipmentId('');
-    setEquipmentSearch('');
-    setScanDebugInfo(null);
-    setBarcodeNotFound({ show: false, barcode: '', format: '' });
-    processedBarcodeRef.current = ''; // Reset the processed barcode ref
-    
-    // Reset barcode in parent component
-    if (onResetBarcode && typeof onResetBarcode === 'function') {
-      onResetBarcode();
-    } else {
-      showToast("Could not reset barcode scanner", "error");
-    }
-    
-    // Show notification
-    showToast('Cleared equipment selection. You can scan a new barcode.', "info");
-  };
-
+  // Modified clear scanned barcode function to force a complete page reload
+const clearScannedBarcode = () => {
+  // Show a loading toast
+  showToast('Reloading page...', "info");
+  
+  // Clear equipment selection
+  setEquipment('');
+  setEquipmentId('');
+  setEquipmentSearch('');
+  setScanDebugInfo(null);
+  setBarcodeNotFound({ show: false, barcode: '', format: '' });
+  processedBarcodeRef.current = ''; // Reset the processed barcode ref
+  
+  // Reset barcode in parent component
+  if (onResetBarcode && typeof onResetBarcode === 'function') {
+    onResetBarcode();
+  }
+  
+  // Force a complete page reload after a short delay to allow toast to be visible
+  setTimeout(() => {
+    window.location.reload(true); // true parameter forces reload from server, not cache
+  }, 500);
+};
   // Handle when user wants to proceed without equipment
   const handleProceedWithoutEquipment = () => {
     setEquipment('');
@@ -571,18 +573,25 @@ export default function ReportIssueFormTechnician({
 
   return (
     <div className="bg-white px-4 sm:px-6 md:px-8 lg:px-40 py-6 sm:py-8 md:py-10 shadow-xl rounded-lg w-full max-w-7xl mx-auto font-light font-outfit">
-      {/* Toast notification */}
+      {/* Toast notification with improved mobile positioning */}
       {toast.show && (
-        <div className={`fixed top-4 right-4 z-50 py-2 px-4 rounded-md shadow-lg flex items-center ${
+        <div className={`fixed top-16 sm:top-4 right-4 left-4 sm:left-auto z-[9999] py-2 px-4 rounded-md shadow-lg flex items-center ${
           toast.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 
           toast.type === 'error' ? 'bg-red-50 text-red-800 border border-red-200' : 
           toast.type === 'warning' ? 'bg-yellow-50 text-yellow-800 border border-yellow-200' :
           'bg-blue-50 text-blue-800 border border-blue-200'
         }`}>
-          {toast.type === 'success' && <CheckCircle className="h-5 w-5 mr-2" />}
-          {toast.type === 'error' && <AlertCircle className="h-5 w-5 mr-2" />}
-          {toast.type === 'warning' && <AlertCircle className="h-5 w-5 mr-2" />}
-          <span>{toast.message}</span>
+          {toast.type === 'success' && <CheckCircle className="h-5 w-5 mr-2 flex-shrink-0" />}
+          {toast.type === 'error' && <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />}
+          {toast.type === 'warning' && <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />}
+          {toast.type === 'info' && <Info className="h-5 w-5 mr-2 flex-shrink-0" />}
+          <span className="text-sm">{toast.message}</span>
+          <button 
+            onClick={() => setToast({...toast, show: false})} 
+            className="ml-auto text-gray-400 hover:text-gray-600"
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
 
@@ -684,7 +693,7 @@ export default function ReportIssueFormTechnician({
                   <button
                     type="button"
                     onClick={clearScannedBarcode}
-                    title="Reset scanned barcode"
+                    title="Reset scanned barcode and refresh page"
                     className="bg-gray-200 text-gray-700 rounded-md px-3 py-2 hover:bg-gray-300"
                   >
                     <RefreshCw size={16} />
@@ -806,7 +815,7 @@ export default function ReportIssueFormTechnician({
                       onClick={clearScannedBarcode}
                       className="text-xs px-3 py-1.5 bg-white hover:bg-gray-50 text-blue-600 rounded border border-blue-200 transition-colors"
                     >
-                      Reset & Scan Again
+                      Reset & Try Again
                     </button>
                   </div>
                 </div>
@@ -823,9 +832,9 @@ export default function ReportIssueFormTechnician({
               {onResetBarcode && (
                 <button 
                   onClick={clearScannedBarcode} 
-                  className="text-blue-700 hover:text-blue-900 ml-2 font-medium"
+                  className="text-blue-700 hover:text-blue-900 ml-2 font-medium flex items-center"
                 >
-                  Reset
+                  <RefreshCw size={12} className="mr-1" /> Reset & Refresh
                 </button>
               )}
             </div>

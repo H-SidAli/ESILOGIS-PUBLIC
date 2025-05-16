@@ -328,7 +328,7 @@ export default function ReportIssueTechnicianPage() {
               </h1>
             </div>
     
-            <div className="px-10 py-8">
+            <div className="px-4 py-8">
                 <ReportIssueFormTechnician 
               onScanClick={handleShowScanPopup}
               onPhotoClick={handleShowPhotoPopup}
