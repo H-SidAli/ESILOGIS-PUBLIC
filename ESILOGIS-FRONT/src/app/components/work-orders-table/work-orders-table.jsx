@@ -518,15 +518,7 @@ export default function WorkOrdersTable({
           View
         </button>
         <hr />
-        <button
-          className="w-full text-left px-4 py-2 hover:bg-gray-100"
-          onClick={() => {
-            setMenuOpen(null);
-            onEditWorkOrder(row.id);
-          }}
-        >
-          Edit
-        </button>
+        
         <hr />
         {row.status === 'Pending' && (
           <>
