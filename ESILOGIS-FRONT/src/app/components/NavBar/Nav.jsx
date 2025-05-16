@@ -21,6 +21,9 @@ export default function Nav({email,role}) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSidebarFullyOpen, setIsSidebarFullyOpen] = useState(false);
   
+  // Normalize role for consistent comparison
+  const normalizedRole = role?.toUpperCase();
+  
   // State for temporary click effects
   const [paneClickEffect, setPaneClickEffect] = useState(false);
   const [translationClickEffect, setTranslationClickEffect] = useState(false);
@@ -34,16 +37,24 @@ export default function Nav({email,role}) {
   const [bellActive, setBellActive] = useState(false);
   const router = useRouter();
 
+  // Only keep one useEffect for animation control
   useEffect(() => {
     if (isOpen) {
-      controls.start({ height: role === "ADMIN" ? "390px" : "300px" }).then(() => {
+      // Adjust height based on role - make USER role height smaller and ADMIN taller
+      controls.start({ 
+        height: normalizedRole === "ADMIN" 
+          ? "450px"  // Increased height for ADMIN role from 390px to 450px
+          : normalizedRole === "USER" 
+            ? "120px"  // Reduced height for USER role
+            : "300px"  // Default height for other roles like TECHNICIAN
+      }).then(() => {
         setIsSidebarFullyOpen(true);
       });
     } else {
       setIsSidebarFullyOpen(false);
       controls.start({ height: "45px" });
     }
-  }, [isOpen, controls,role]);
+  }, [isOpen, controls, normalizedRole]);
   
   const toggleMenu = () => {
     // Add haptic feedback animation
@@ -68,22 +79,17 @@ export default function Nav({email,role}) {
 
     // Logout functionality
     setTimeout(() => {
-      // Clear any auth tokens or user data from localStorage/sessionStorage
       localStorage.removeItem('authToken');
       sessionStorage.removeItem('user');
       sessionStorage.removeItem('token');
-      
-      // Redirect to login page
       router.push('../../login/');
     }, 300);
   };
   
   const handleTranslationClick = () => {
-    // Only show temporary click effect without maintaining state
     setTranslationClickEffect(true);
     setTimeout(() => setTranslationClickEffect(false), 300);
     
-    // Enhanced animation for haptic feedback
     translationIconControls.start({
       scale: [1, 0.85, 1],
       opacity: [1, 0.7, 1],
@@ -91,62 +97,65 @@ export default function Nav({email,role}) {
     });
   };
   
-  const navItems = [
+  // Use normalized role for comparison
+  const navItems = normalizedRole === "USER" ? [] : [
     { 
-        text: "Work Orders",
-        href: role === "ADMIN" ? "#" : "/technician/workOrders",
-        icon: AlertOcta,
-        submenu: role === "admin" ?  [
-      { text: "Reported Issues", href: "/admin/reported-issues" }, 
-      { text: "Preventive Interventions", href: "/admin/preventive-interventions" }
-    ] : []
-      },
-       { 
-           icon: Piechart,  
-           text: "Dashboard", 
-           href: "/admin/dashboard", 
-           submenu: [] // Empty submenu
-         },
+      text: "Work Orders",
+      href: normalizedRole === "ADMIN" ? "#" : "/technician/workOrders",
+      icon: AlertOcta,
+      submenu: normalizedRole === "ADMIN" ? [
+        { text: "Reported Issues", href: "/admin/reported-issues" }, 
+        { text: "Preventive Interventions", href: "/admin/preventive-interventions" }
+      ] : []
+    },
+    { 
+      icon: Piechart,  
+      text: "Dashboard", 
+      href: normalizedRole === "ADMIN" ? "/admin/dashboard" : "/technician/Dashboard", 
+      submenu: [] // Empty submenu
+    },
   
-     ...(role==="ADMIN" ? [{ 
-        icon: File, 
-        text: "File", 
-        href: "/admin/files",
-        submenu: [] // Empty submenu
-      }]: []),
-     ...(role === "ADMIN" ? [{ 
-        icon: settings,
-        text: "Settings", 
-        href: "#", 
-   
-        submenu: [ 
-          { text: "Licence", href: "#" }, 
-          { text: "Technical Staff", href: "/admin/technical-staff" }, 
-          { text: "Users", href: "/admin/users" },
-          { text: "Locations", href: "/admin/locations" },
-          { text: "Departments", href: "/admin/departments" },
-          { text: "Equipments", href: "/admin/equipments" },
-        ]
-      }] : []), 
-      ...(role != "ADMIN" ? [{ 
-        icon: UserProfile, 
-        text: "Techical Staff", 
-        href: "/technician/technical-staff",
-        submenu: [] // Empty submenu
-      }]: []),
-    ];
+    ...(normalizedRole === "ADMIN" ? [{ 
+      icon: File, 
+      text: "File", 
+      href: "/admin/files",
+      submenu: [] // Empty submenu
+    }]: []),
+    ...(normalizedRole === "ADMIN" ? [{ 
+      icon: settings,
+      text: "Settings", 
+      href: "#", 
+      submenu: [ 
+        { text: "Licence", href: "/about" }, 
+        { text: "Technical Staff", href: "/admin/technical-staff" }, 
+        { text: "Users", href: "/admin/users" },
+        { text: "Locations", href: "/admin/locations" },
+        { text: "Departments", href: "/admin/departments" },
+        { text: "Equipments", href: "/admin/equipments" },
+      ]
+    }] : []), 
+    ...(normalizedRole !== "ADMIN" && normalizedRole !== "USER" ? [{ 
+      icon: UserProfile, 
+      text: "Technical Staff",
+      href: "/technician/technical-staff",
+      submenu: [] // Empty submenu
+    }] : []),
+  ];
   
   const handlenotifications = () => {
-    // Add haptic feedback animation
     setBellActive(true);
     setTimeout(() => setBellActive(false), 150);
     
-    router.push("/admin/notifications");
+    if (normalizedRole === "ADMIN") {
+      router.push("/admin/notifications");
+    } else if (normalizedRole === "TECHNICIAN") {
+      router.push("/technician/notifications");
+    }
   };
-
+  
   return (
     <motion.nav
-      className="absolute flex flex-col w-[calc(100%-8px)] h-[50px] rounded-b-4xl rounded-bl-4xl rounded-t-4xl rounded-tl-4xl bg-black z-50"
+      className={`absolute flex flex-col w-[calc(100%-8px)] h-[50px] rounded-b-4xl rounded-bl-4xl rounded-t-4xl rounded-tl-4xl bg-black z-50 ${normalizedRole === "USER" ? "user-nav" : ""}`}
       role="navigation"
       initial={{ height: "45px" }}
       animate={controls}
@@ -164,18 +173,21 @@ export default function Nav({email,role}) {
         </motion.div>
         
         <div className="w-fit h-fit gap-4 flex flex-row pr-6">
-          <motion.div
-            whileTap={{ scale: 0.85 }}
-            className={`flex items-center justify-center p-1 rounded-full ${bellActive ? 'bg-[#444444]' : 'hover:bg-[#333333]'} transition-colors duration-150`}
-          > 
-          <Link href={`${role === "admin" ? "/admin/notifications" : "/technician/notifications"}`}> 
-            <Bell 
-              onClick={handlenotifications} 
-              size={20} 
-              className="cursor-pointer text-white"
-            />
-          </Link>
-          </motion.div>
+          {/* Bell icon only for ADMIN and TECHNICIAN */}
+          {normalizedRole === "ADMIN" || normalizedRole === "TECHNICIAN" ? (
+            <motion.div
+              whileTap={{ scale: 0.85 }}
+              className={`flex items-center justify-center p-1 rounded-full ${bellActive ? 'bg-[#444444]' : 'hover:bg-[#333333]'} transition-colors duration-150`}
+            > 
+              <Link href={`${normalizedRole === "ADMIN" ? "/admin/notifications" : "/technician/notifications"}`}> 
+                <Bell 
+                  onClick={handlenotifications} 
+                  size={20} 
+                  className="cursor-pointer text-white"
+                />
+              </Link>
+            </motion.div>
+          ) : null}
           
           <motion.div
             whileTap={{ scale: 0.85 }}
@@ -203,7 +215,8 @@ export default function Nav({email,role}) {
         </div> 
       </div>
 
-      {isSidebarFullyOpen && isOpen && 
+      {/* Only show navigation items for non-USER roles */}
+      {isSidebarFullyOpen && isOpen && normalizedRole !== "USER" && (
         <div className="w-full mt-12 h-auto flex pl-10 px-6 font-oxanium pb-9">
           <div className="w-1/2 flex flex-col gap-4 pr-2 ">
             {navItems.slice(0, 2).map((item, index) => (
@@ -263,48 +276,50 @@ export default function Nav({email,role}) {
             ))}
           </div>
         </div> 
-      }  
+      )}
+      
       <div className="w-full flex justify-center items-center"> 
-      { isSidebarFullyOpen && isOpen && <hr className="w-11/12 opacity-50" /> }
+        {isSidebarFullyOpen && isOpen && <hr className="w-11/12 opacity-50" />}
       </div>  
 
       <div className="w-full h-auto flex flex-row p-9 py-4">  
-      { isSidebarFullyOpen && isOpen && <Image src={accountCircle} width={35} alt="accountCircle" />} 
-      {isSidebarFullyOpen && isOpen &&
-        <div className="flex flex-row w-full items-center justify-between p-1"> 
-          <h1 className="whitespace-nowrap font-outfit text-white text-[12px]">{email}  <br /><span className="font-extralight text-[9px] opacity-55">{role}</span></h1> 
-          <motion.div 
-            onClick={handlePaneClick} 
-            className="cursor-pointer group relative"
-            whileTap={{ scale: 0.9 }}
-          >
+        {isSidebarFullyOpen && isOpen && <Image src={accountCircle} width={35} alt="accountCircle" />} 
+        {isSidebarFullyOpen && isOpen &&
+          <div className="flex flex-row w-full items-center justify-between p-1"> 
+            <h1 className={`whitespace-nowrap font-outfit text-white text-[12px] ${normalizedRole === "USER" ? "mt-2" : ""}`}>
+              {email}<br />
+              <span className="font-extralight text-[9px] opacity-55">{role}</span>
+            </h1> 
             <motion.div 
-              animate={paneIconControls}
-              className="relative w-6 h-6"
+              onClick={handlePaneClick} 
+              className="cursor-pointer group relative"
+              whileTap={{ scale: 0.9 }}
             >
-              <div className="absolute top-0 left-0">
-                <div 
-                  className={`p-1 rounded-full transition-all duration-200 
-                    ${paneClickEffect ? 'bg-[#CCCCCC]' : 'hover:bg-[#444444]'}`}
-                >
-                  <Image 
-                    src={Openpane}
-                    alt="Logout"
-                    width={24}
-                    height={24}
-                  />
+              <motion.div 
+                animate={paneIconControls}
+                className="relative w-6 h-6"
+              >
+                <div className="absolute top-0 left-0">
+                  <div 
+                    className={`p-1 rounded-full transition-all duration-200 
+                      ${paneClickEffect ? 'bg-[#CCCCCC]' : 'hover:bg-[#444444]'}`}
+                  >
+                    <Image 
+                      src={Openpane}
+                      alt="Logout"
+                      width={24}
+                      height={24}
+                    />
+                  </div>
                 </div>
+              </motion.div>
+              <div className="absolute right-0 -top-9 transform scale-0 group-hover:scale-100 transition-transform origin-bottom bg-black text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                Logout
               </div>
             </motion.div>
-            {/* Add tooltip */}
-            <div className="absolute right-0 -top-9 transform scale-0 group-hover:scale-100 transition-transform origin-bottom bg-black text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-              Logout
-            </div>
-          </motion.div>
-        </div>
-      }
+          </div>
+        }
       </div>
     </motion.nav>
   );
 }
-

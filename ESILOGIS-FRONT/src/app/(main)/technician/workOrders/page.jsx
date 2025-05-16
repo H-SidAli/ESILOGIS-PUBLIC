@@ -61,9 +61,29 @@ export default function WorkOrders() {
     useEffect(() => {
       const fetchUserProfile = async () => {
         try {
+          // First try to get user from sessionStorage to avoid unnecessary API calls
+          try {
+            const cachedUser = JSON.parse(sessionStorage.getItem('user') || '{}');
+            if (cachedUser && cachedUser.id) {
+              console.log("Using cached user data");
+              setCurrentWorker({
+                id: cachedUser.id,
+                name: `${cachedUser.firstName || ''} ${cachedUser.lastName || ''}`.trim() || cachedUser.email || "Unknown",
+                avatar: `${cachedUser.firstName?.[0] || ''}${cachedUser.lastName?.[0] || ''}` || "?",
+                role: cachedUser.role?.name || cachedUser.role || "Technician"
+              });
+              return; // Exit early if we have cached data
+            }
+          } catch (e) {
+            console.warn("Error reading cached user:", e);
+          }
+          
           const token = getToken();
           if (!token) return;
           
+          console.log("Fetching user profile...");
+          
+          // Try with /me endpoint
           const response = await fetch("http://localhost:3001/api/auth/me", {
             headers: {
               "Authorization": `Bearer ${token}`
@@ -71,30 +91,137 @@ export default function WorkOrders() {
           });
           
           if (!response.ok) {
+            // If 404, try alternative endpoint
+            if (response.status === 404) {
+              console.log("First endpoint not found, trying alternative...");
+              
+              const alternativeResponse = await fetch("http://localhost:3001/api/users/me", {
+                headers: {
+                  "Authorization": `Bearer ${token}`
+                }
+              });
+              
+              if (!alternativeResponse.ok) {
+                // Try a third option if needed
+                if (alternativeResponse.status === 404) {
+                  console.log("Second endpoint not found, trying third option...");
+                  
+                  const thirdAttempt = await fetch("http://localhost:3001/api/profile", {
+                    headers: {
+                      "Authorization": `Bearer ${token}`
+                    }
+                  });
+                  
+                  if (!thirdAttempt.ok) {
+                    if (thirdAttempt.status === 401) {
+                      showToast('Session expired. Please login again.', 'error');
+                      setTimeout(() => router.push('/login'), 1500);
+                      return;
+                    }
+                    
+                    // Last resort - use mock data in development mode
+                    if (process.env.NODE_ENV === 'development') {
+                      useMockUserData();
+                      return;
+                    }
+                    
+                    throw new Error(`All profile endpoints failed: ${thirdAttempt.status}`);
+                  }
+                  
+                  const data = await thirdAttempt.json();
+                  handleUserData(data);
+                  return;
+                }
+                
+                if (alternativeResponse.status === 401) {
+                  showToast('Session expired. Please login again.', 'error');
+                  setTimeout(() => router.push('/login'), 1500);
+                  return;
+                }
+                
+                // Last resort - use mock data in development mode
+                if (process.env.NODE_ENV === 'development') {
+                  useMockUserData();
+                  return;
+                }
+                
+                throw new Error(`Failed to fetch user profile: ${alternativeResponse.status}`);
+              }
+              
+              const data = await alternativeResponse.json();
+              handleUserData(data);
+              return;
+            }
+            
             if (response.status === 401) {
               showToast('Session expired. Please login again.', 'error');
               setTimeout(() => router.push('/login'), 1500);
               return;
             }
+            
+            // Last resort - use mock data in development mode
+            if (process.env.NODE_ENV === 'development') {
+              useMockUserData();
+              return;
+            }
+            
             throw new Error(`Failed to fetch user profile: ${response.status}`);
           }
           
           const data = await response.json();
-          if (data && data.success) {
-            const profile = data.data || {};
-            // Get first letter of first and last name for avatar
-            const initials = `${profile.firstName?.charAt(0) || ''}${profile.lastName?.charAt(0) || ''}`;
-            
-            setCurrentWorker({
-              id: profile.id || "",
-              name: `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || profile.email || "Unknown",
-              avatar: initials || "?",
-              role: profile.role || "Technician"
-            });
+          handleUserData(data);
+          
+          // Cache the user data for future use
+          if (data && data.data) {
+            sessionStorage.setItem('user', JSON.stringify(data.data));
+          } else if (data) {
+            sessionStorage.setItem('user', JSON.stringify(data));
           }
         } catch (error) {
           console.error("Error fetching user profile:", error);
+          
+          // For development, use mock data
+          if (process.env.NODE_ENV === 'development') {
+            useMockUserData();
+          }
         }
+      };
+      
+      // Helper function to process user data from different API formats
+      const handleUserData = (data) => {
+        const userData = data.data || data;
+        
+        // Get first letter of first and last name for avatar
+        const initials = `${userData.firstName?.charAt(0) || ''}${userData.lastName?.charAt(0) || ''}`;
+        
+        setCurrentWorker({
+          id: userData.id || "",
+          name: `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.email || "Unknown",
+          avatar: initials || "?",
+          role: userData.role?.name || userData.role || "Technician"
+        });
+      };
+      
+      // Helper to use mock data in development
+      const useMockUserData = () => {
+        console.log("Using mock user data for development");
+        const mockUser = {
+          id: "dev-123",
+          firstName: "Dev",
+          lastName: "User",
+          email: "dev.user@example.com",
+          role: "Technician"
+        };
+        
+        setCurrentWorker({
+          id: mockUser.id,
+          name: `${mockUser.firstName} ${mockUser.lastName}`,
+          avatar: "DU",
+          role: mockUser.role
+        });
+        
+        // Store mock data in session for consistency
+        sessionStorage.setItem('user', JSON.stringify(mockUser));
       };
       
       fetchUserProfile();
@@ -578,8 +705,8 @@ export default function WorkOrders() {
     return ( 
         <section className="w-full min-h-screen flex flex-row items-start justify-center bg-gray-100 relative overflow-hidden"> 
             <div className="hidden sm:block absolute top-0 right-0 z-10">
-                    <Image src={arrows} alt="" width={212}/>
-                  </div>
+                <Image src={arrows} alt="" width={212}/>
+            </div>
             
             {/* Toast notification */}
             {toast.visible && (
@@ -597,63 +724,63 @@ export default function WorkOrders() {
             )}
 
             <div className={`w-full z-30 ${isMobile ? 'mt-12' : 'ml-[127px]'}`}>
-            <div className="">
-          <h1 className="font-oxanium p-6 font-semibold text-[26.07px]">
-            Work Orders
-          </h1>
-        </div>
+              <div className="">
+                <h1 className="font-oxanium p-6 font-semibold text-[26.07px]">
+                  Work Orders
+                </h1>
+              </div>
                 
-                {/* Error message */}
-                {error && (
-                  <div className="mx-4 my-4 bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-lg shadow-sm flex flex-col">
-                    <div className="flex items-center mb-2">
-                      <AlertCircle className="h-5 w-5 mr-2" />
-                      <strong className="font-bold">Error loading data</strong>
-                    </div>
-                    <p className="block mb-4">{error}</p>
-                    <div className="flex justify-end">
-                      <button 
-                        onClick={handleRetry}
-                        className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-800 rounded-md transition-colors"
-                        disabled={loading}
-                      >
-                        {loading ? (
-                          <span className="flex items-center"><Loader className="h-4 w-4 mr-2 animate-spin" /> Retrying...</span>
-                        ) : 'Retry'}
-                      </button>
-                    </div>
+              {/* Error message */}
+              {error && (
+                <div className="mx-4 my-4 bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-lg shadow-sm flex flex-col">
+                  <div className="flex items-center mb-2">
+                    <AlertCircle className="h-5 w-5 mr-2" />
+                    <strong className="font-bold">Error loading data</strong>
                   </div>
-                )}
+                  <p className="block mb-4">{error}</p>
+                  <div className="flex justify-end">
+                    <button 
+                      onClick={handleRetry}
+                      className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-800 rounded-md transition-colors"
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <span className="flex items-center"><Loader className="h-4 w-4 mr-2 animate-spin" /> Retrying...</span>
+                      ) : 'Retry'}
+                    </button>
+                  </div>
+                </div>
+              )}
                 
-                {/* Loading state */}
-                {loading && !error && (
-                  <div className="flex justify-center items-center py-16">
-                    <div className="flex flex-col items-center">
-                      <Loader className="h-10 w-10 text-[#0060B4] animate-spin mb-4" />
-                      <p className="text-gray-600">Loading work orders...</p>
-                    </div>
+              {/* Loading state */}
+              {loading && !error && (
+                <div className="flex justify-center items-center py-16">
+                  <div className="flex flex-col items-center">
+                    <Loader className="h-10 w-10 text-[#0060B4] animate-spin mb-4" />
+                    <p className="text-gray-600">Loading work orders...</p>
                   </div>
-                )}
+                </div>
+              )}
                 
-                {/* Table component */}
-                {!loading && !error && (
-                  <div className="h-[calc(100vh-180px)] sm:h-[calc(100vh-150px)] overflow-hidden bg-white rounded-lg">
-                    <Workorder 
-                        workOrders={workOrders}
-                        loading={loading}
-                        currentWorker={currentWorker}
-                        onBeginTask={handleBeginTask}
-                        onCompleteTask={handleCompleteTask}
-                        onPauseTask={handlePauseTask}
-                        onResumeTask={handleResumeTask}
-                        onDenyTask={handleDenyTask}
-                        onDeleteWorkOrders={handleDeleteWorkOrders}
-                        onShowDetails={handleShowDetails}
-                        onEditWorkOrder={(id) => router.push(`/technician/workOrders/${id}/edit`)}
-                        isSubmitting={isSubmitting}
-                    />
-                  </div>
-                )}
+              {/* Table component */}
+              {!loading && !error && (
+                <div className="h-[calc(100vh-180px)] sm:h-[calc(100vh-150px)] overflow-hidden bg-white rounded-lg">
+                  <Workorder 
+                    workOrders={workOrders}
+                    loading={loading}
+                    currentWorker={currentWorker}
+                    onBeginTask={handleBeginTask}
+                    onCompleteTask={handleCompleteTask}
+                    onPauseTask={handlePauseTask}
+                    onResumeTask={handleResumeTask}
+                    onDenyTask={handleDenyTask}
+                    onDeleteWorkOrders={handleDeleteWorkOrders}
+                    onShowDetails={handleShowDetails}
+                    onEditWorkOrder={(id) => router.push(`/technician/workOrders/${id}/edit`)}
+                    isSubmitting={isSubmitting}
+                  />
+                </div>
+              )}
             </div>
         </section>
     );

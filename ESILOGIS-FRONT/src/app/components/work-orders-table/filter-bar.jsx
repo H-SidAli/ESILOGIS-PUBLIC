@@ -111,7 +111,7 @@ const FilterBar = ({
         {/* Add Work Order Button */}
         <Link href="../../technician/report-issue-technician">
           <button className="bg-[#0060B4] text-white px-4 py-1 rounded-md h-8 flex items-center justify-center cursor-pointer">
-            <span className="text-lg mr-1">+</span> Add New Report
+             Add New Report
           </button>
         </Link>
       </div>
@@ -138,9 +138,9 @@ const FilterBar = ({
             <FilterIcon className="w-5 h-5 text-gray-700" />
           </button>
           {/* Add Work Order Button */}
-          <Link href="../../technician/CreateWorkOrder" className="ml-2">
+          <Link href="../../technician/report-issue-technician" className="ml-2">
             <button className="bg-[#0060B4] text-white px-3 py-1 rounded-md h-8 flex items-center justify-center cursor-pointer text-sm">
-              <span className="text-lg mr-1">+</span>
+              <span className="text-lg mr-1">Add New Report</span>
             </button>
           </Link>
         </div>

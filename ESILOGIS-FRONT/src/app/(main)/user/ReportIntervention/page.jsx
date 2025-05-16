@@ -58,7 +58,7 @@ export default function ReportIssueUserPage() {
         </div>
       ) : (
         <div className="m-1">
-          <MobileNav firstName='USER' lastName='NAME' role='user' />
+          <MobileNav firstName='USER' lastName='NAME' role='USER' email='user-test@example.com' />
         </div>
       )}
 

@@ -255,8 +255,17 @@ export default function ReportIssueFormTechnician({
         // Reset the barcode processing tracker when location changes
         processedBarcodeRef.current = '';
         
+        if (!locationId) {
+          console.log("No location ID provided");
+          setEquipmentList([]);
+          return;
+        }
+        
+        console.log(`Fetching equipment for location ID: ${locationId}`);
+        
+        // Use query parameter approach first
         const response = await fetch(
-          `http://localhost:3001/api/equipment/location/${locationId}`,
+          `http://localhost:3001/api/equipment?locationId=${locationId}`,
           {
             method: "GET",
             headers: {
@@ -265,31 +274,54 @@ export default function ReportIssueFormTechnician({
             },
           }
         );
-
+    
+        // If first attempt fails, try a different endpoint pattern
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          console.log(`First endpoint attempt failed with status: ${response.status}, trying alternative...`);
+          
+          // Try the location endpoint directly
+          const locationResponse = await fetch(
+            `http://localhost:3001/api/location/${locationId}`,
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${sessionStorage.getItem("token")}`,
+              },
+            }
+          );
+          
+          if (!locationResponse.ok) {
+            throw new Error(`HTTP error! status: ${locationResponse.status}`);
+          }
+          
+          const locationData = await locationResponse.json();
+          
+          // Extract equipment if it's nested in the location data
+          let equipmentArray = [];
+          
+          if (locationData && locationData.equipment) {
+            equipmentArray = Array.isArray(locationData.equipment) 
+              ? locationData.equipment 
+              : [];
+          } else if (locationData && locationData.data && locationData.data.equipment) {
+            equipmentArray = Array.isArray(locationData.data.equipment) 
+              ? locationData.data.equipment 
+              : [];
+          }
+          
+          console.log("Fetched equipment from location endpoint:", equipmentArray);
+          setEquipmentList(equipmentArray);
+          return;
         }
-
+    
         const result = await response.json();
         
-        // Ensure we handle the API response structure correctly
-        let equipmentArray;
-        if (Array.isArray(result)) {
-          equipmentArray = result;
-        } else if (result && typeof result === 'object') {
-          if (Array.isArray(result.data)) {
-            equipmentArray = result.data;
-          } else if (result.equipments && Array.isArray(result.equipments)) {
-            equipmentArray = result.equipments;
-          } else {
-            equipmentArray = [];
-          }
-        } else {
-          equipmentArray = [];
-        }
+        // Handle the API response correctly - get the data property if it exists
+        const equipmentArray = result.data || result;
         
         console.log("Fetched equipment:", equipmentArray);
-        setEquipmentList(equipmentArray);
+        setEquipmentList(Array.isArray(equipmentArray) ? equipmentArray : []);
         
       } catch (err) {
         console.error("Error fetching equipment:", err);
@@ -297,12 +329,11 @@ export default function ReportIssueFormTechnician({
         
         // For development, provide mock data
         if (process.env.NODE_ENV === 'development') {
+          console.log("Using mock equipment data for development");
           const mockEquipment = [
             { id: 1, inventoryCode: 'EQ001', type: { id: 1, name: 'Projector' } },
             { id: 2, inventoryCode: 'EQ002', type: { id: 2, name: 'Computer' } },
             { id: 3, inventoryCode: 'EQ003', type: { id: 3, name: 'Printer' } },
-            { id: 4, inventoryCode: '4901234567894', type: { id: 4, name: 'Scanner' } },
-            { id: 5, inventoryCode: '123456789', type: { id: 5, name: 'Test Equipment' } },
           ];
           
           setEquipmentList(mockEquipment);

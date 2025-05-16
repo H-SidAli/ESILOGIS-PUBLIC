@@ -61,7 +61,7 @@ locationRouter.get(
 locationRouter.get(
     "/:id",
     authenticate,
-    restrictTo(Role.ADMIN),
+    restrictTo(Role.ADMIN,Role.USER, Role.TECHNICIAN),
     locationController.getLocationById
 );
 
